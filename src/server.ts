@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+import http from 'http';
 
 import 'express-async-errors';
 import { Application, Request, Response, json, urlencoded, NextFunction } from 'express';
@@ -8,13 +10,15 @@ import hpp from 'hpp';
 import helmet from 'helmet';
 import compression from 'compression';
 import { StatusCodes } from 'http-status-codes';
-import { Server } from 'socket.io';
-import { isAxiosError } from 'axios';
-import { CustomError, IErrorResponse, winstonLogger } from '@flowercordoba/task-shared-library';
 import { config } from '@gateway/config';
+import { elasticSearch } from '@gateway/elasticsearch';
+import { Server } from 'socket.io';
+import { createClient } from 'redis';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { isAxiosError } from 'axios';
+import { winstonLogger, IErrorResponse, CustomError } from '@flowercordoba/task-shared-library';
 
 const SERVER_PORT = 4000;
-console.log(SERVER_PORT);
 const DEFAULT_ERROR_CODE = 500;
 const log: Logger = winstonLogger(`${config.ELASTIC_SEARCH_URL}`, 'apiGatewayServer', 'debug');
 export let socketIO: Server;
@@ -29,8 +33,10 @@ export class GatewayServer {
   public start(): void {
     this.securityMiddleware(this.app);
     this.standardMiddleware(this.app);
+    this.routesMiddleware(this.app);
+    this.startElasticSearch();
     this.errorHandler(this.app);
-
+    this.startServer(this.app);
   }
 
   private securityMiddleware(app: Application): void {
@@ -38,15 +44,18 @@ export class GatewayServer {
     app.use(
       cookieSession({
         name: 'session',
-        keys: ['test1','test2'],
+        keys: [`${config.SECRET_KEY_ONE}`, `${config.SECRET_KEY_TWO}`],
         maxAge: 24 * 7 * 3600000,
-        secure: false
+        secure: config.NODE_ENV !== 'development',
+        ...(config.NODE_ENV !== 'development' && {
+          sameSite: 'none'
+        })
       })
     );
     app.use(hpp());
     app.use(helmet());
     app.use(cors({
-      origin: 'all',
+      origin: config.CLIENT_URL,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
     }));
@@ -60,6 +69,13 @@ export class GatewayServer {
     app.use(urlencoded({ extended: true, limit: '200mb' }));
   }
 
+  private routesMiddleware(app: Application): void {
+    console.log(app);
+  }
+
+  private startElasticSearch(): void {
+    elasticSearch.checkConnection();
+  }
 
   private errorHandler(app: Application): void {
     app.use('*', (req: Request, res: Response, next: NextFunction) => {
@@ -84,5 +100,40 @@ export class GatewayServer {
     });
   }
 
+  private async startServer(app: Application): Promise<void> {
+    try {
+      const httpServer: http.Server = new http.Server(app);
+      const socketIO: Server = await this.createSocketIO(httpServer);
+      console.log(socketIO);
+      this.startHttpServer(httpServer);
+    } catch (error) {
+      log.log('error', 'GatewayService startServer() error method:', error);
+    }
+  }
 
+  private async createSocketIO(httpServer: http.Server): Promise<Server> {
+    const io: Server = new Server(httpServer, {
+      cors: {
+        origin: `${config.CLIENT_URL}`,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+      }
+    });
+    const pubClient = createClient({ url: config.REDIS_HOST });
+    const subClient = pubClient.duplicate();
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    socketIO = io;
+    return io;
+  }
+
+  private async startHttpServer(httpServer: http.Server): Promise<void> {
+    try {
+      log.info(`Gateway server has started with process id ${process.pid}`);
+      httpServer.listen(SERVER_PORT, () => {
+        log.info(`Gateway server running on port ${SERVER_PORT}`);
+      });
+    } catch (error) {
+      log.log('error', 'GatewayService startServer() error method:', error);
+    }
+  }
 }
