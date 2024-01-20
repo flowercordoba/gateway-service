@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import http from 'http';
 
 import 'express-async-errors';
@@ -12,9 +11,11 @@ import compression from 'compression';
 import { StatusCodes } from 'http-status-codes';
 import { config } from '@gateway/config';
 import { elasticSearch } from '@gateway/elasticsearch';
+import { appRoutes } from '@gateway/routes';
 import { Server } from 'socket.io';
 import { createClient } from 'redis';
 import { createAdapter } from '@socket.io/redis-adapter';
+import { SocketIOAppHandler } from '@gateway/sockets/socket';
 import { isAxiosError } from 'axios';
 import { winstonLogger, IErrorResponse, CustomError } from '@flowercordoba/task-shared-library';
 
@@ -60,7 +61,6 @@ export class GatewayServer {
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
     }));
 
-
   }
 
   private standardMiddleware(app: Application): void {
@@ -70,7 +70,7 @@ export class GatewayServer {
   }
 
   private routesMiddleware(app: Application): void {
-    console.log(app);
+    appRoutes(app);
   }
 
   private startElasticSearch(): void {
@@ -104,8 +104,8 @@ export class GatewayServer {
     try {
       const httpServer: http.Server = new http.Server(app);
       const socketIO: Server = await this.createSocketIO(httpServer);
-      console.log(socketIO);
       this.startHttpServer(httpServer);
+      this.socketIOConnections(socketIO);
     } catch (error) {
       log.log('error', 'GatewayService startServer() error method:', error);
     }
@@ -135,5 +135,10 @@ export class GatewayServer {
     } catch (error) {
       log.log('error', 'GatewayService startServer() error method:', error);
     }
+  }
+
+  private socketIOConnections(io: Server): void {
+    const socketIoApp = new SocketIOAppHandler(io);
+    socketIoApp.listen();
   }
 }
