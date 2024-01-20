@@ -1,5 +1,5 @@
 {
-  "name": "jobber-gateway",
+  "name": "task-gateway",
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
@@ -8,10 +8,10 @@
     "stop": "pm2 stop all",
     "delete": "pm2 delete all",
     "dev": "nodemon -r tsconfig-paths/register src/app.ts | pino-pretty -c",
-    "lint:check": "eslint 'src/**/*.ts'",
-    "lint:fix": "eslint 'src/**/*.ts' --fix",
-    "prettier:check": "prettier --check 'src/**/*.{ts,json}'",
-    "prettier:fix": "prettier --write 'src/**/*.{ts,json}'",
+    "lint:check": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "prettier:check": "prettier --check src/**/*.{ts,json}",
+    "prettier:fix": "prettier --write src/**/*.{ts,json}",
     "build": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json",
     "test": "jest --coverage=true -w=1 --forceExit --detectOpenHandles --watchAll=false"
   },
