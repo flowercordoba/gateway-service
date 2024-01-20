@@ -12,6 +12,7 @@ import { StatusCodes } from 'http-status-codes';
 import { config } from '@gateway/config';
 import { elasticSearch } from '@gateway/elasticsearch';
 import { appRoutes } from '@gateway/routes';
+import { axiosAuthInstance } from '@gateway/services/api/auth.service';
 import { Server } from 'socket.io';
 import { createClient } from 'redis';
 import { createAdapter } from '@socket.io/redis-adapter';
@@ -47,10 +48,7 @@ export class GatewayServer {
         name: 'session',
         keys: [`${config.SECRET_KEY_ONE}`, `${config.SECRET_KEY_TWO}`],
         maxAge: 24 * 7 * 3600000,
-        secure: config.NODE_ENV !== 'development',
-        ...(config.NODE_ENV !== 'development' && {
-          sameSite: 'none'
-        })
+        secure: false
       })
     );
     app.use(hpp());
@@ -61,6 +59,12 @@ export class GatewayServer {
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
     }));
 
+    app.use((req: Request, _res: Response, next: NextFunction) => {
+      if (req.session?.jwt) {
+        axiosAuthInstance.defaults.headers['Authorization'] = `Bearer ${req.session?.jwt}`;
+      }
+      next();
+    });
   }
 
   private standardMiddleware(app: Application): void {
